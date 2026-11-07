@@ -10,9 +10,12 @@ fastapi==0.85.0
 uvicorn==0.18.3
 #datascience
 jupyter==1.0.0
-pandas==1.5.0
-numpy==1.23.3
-scikit-learn==1.1.2
+# pandas==1.5.0
+pandas==2.2.2
+# numpy==1.23.3
+numpy==1.26.4
+# scikit-learn==1.1.2
+scikit-learn==1.5.0
 matplotlib==3.6.0
 seaborn==0.12.0
 dask==2022.9.2
@@ -20,20 +23,29 @@ dask==2022.9.2
 geopy==2.2.0
 #MLOps
 gradio==3.4.1
-streamlit==1.13.0
-protobuf==3.16.0
-onnx==1.12.0
-mlflow==1.29.0
+# streamlit==1.13.0
+streamlit==1.24.0
+# protobuf==3.16.0
+protobuf==4.25.3
+# onnx==1.12.0
+onnx==1.16.0
+# mlflow==1.29.0
+mlflow==2.22.0
 databricks==0.2
-databricks-cli==0.17.3
-databricks-sql-connector==2.1.0
+# databricks-cli==0.17.3
+databricks-cli==0.18.0
+# databricks-sql-connector==2.1.0
+databricks-sql-connector==4.4.0
 ##MLOps-HuggingFace
-transformers==4.22.2
+# transformers==4.22.2
+transformers==4.41.2
 datasets==2.5.2
-tokenizers==0.12.1
+# tokenizers==0.12.1
+tokenizers==0.19.1
 #deep learning
-torch==1.12.1
-torchvision==0.13.1
-tensorflow==2.10.0
-
-
+# torch==1.12.1
+torch==2.5.1
+# torchvision==0.13.1
+torchvision==0.20.1
+# tensorflow==2.10.0
+tensorflow==2.16.2
