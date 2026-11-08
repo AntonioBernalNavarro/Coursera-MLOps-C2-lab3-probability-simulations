@@ -8,11 +8,19 @@ def generate_true_false(probability=0.23, num=4):
     """Return True/False with probability
 
     Args:
-        probability (floating point decimal): probability of True/False ex. [0.5, 0.5] or [0.023, 0.977]
+        probability: scalar (probability of True) or [p_true, p_false] pair.
         num (int): number of scenarios to generate
-
     """
-    # print probability as a percentage with 2 decimal places and % sign using f-string
+    if isinstance(probability, (list, tuple)):
+        if len(probability) != 2:
+            raise ValueError(
+                f"probability must be a scalar or a [p_true, p_false] pair, got {probability!r}"
+            )
+        if abs(sum(probability) - 1.0) > 1e-6:
+            raise ValueError(
+                f"probabilities must sum to 1, got {probability!r}"
+            )
+        probability = probability[0]
     print(f"Probability of True: {probability*100:.2f}%")
     scene_probability = [probability, 1 - probability]
     scenarios = [
@@ -20,40 +28,32 @@ def generate_true_false(probability=0.23, num=4):
     ]
     print("Startup SUCCESS: {}".format(scenarios.count(True)))
     print("Startup FAIL: {}".format(scenarios.count(False)))
-    # print actual ratio of True/False formatted to 4 decimal places and percentage
     print("Ratio True/False: {:.4f}%".format(scenarios.count(True) / num * 100))
     return scenarios
 
 
-# create function that accepts value of startup, percentage of company owned and a number of scenarios
 def calculate_value(
     startup_valuation=100000000,
     percent_owned=0.01,
     simulations=4,
-    probability=0.23,
+    probability=0.023,
 ):
-    """Select the amount of startups worked for in a row
-    Assumes 1 in 43 startups succeed
-    Assumes 1% of company owned
-    Assumes 100 million valuation
-    Assumes 4 startups worked for in a row (about 16 years of career)
+    """Select the amount of startups worked for in a row.
+
+    Assumes 1 in 43 startups succeed, 1% owned, 100M valuation,
+    and 4 startups in a row (~16 years of career).
     """
     total = 0
     for simulation in range(1, simulations + 1):
-        # generate scenarios with probability 0.5
         scenarios = generate_true_false(probability, simulations)
-        # if True, add value of startup to total
         if scenarios[0]:
             total += startup_valuation * percent_owned
-        # if False, subtract value of startup from total
         else:
             total -= 0
-        # print total value of startup
         print(f"Cumulative Total value of startup: {total} Company #{simulation}")
     return total
 
 
-# create function that uses calculate_value function to determine how many people earned money from startups and total
 def calculate_value_multiple(
     startup_valuation=100000000,
     percent_owned=0.01,
@@ -61,54 +61,36 @@ def calculate_value_multiple(
     probability=0.023,
     people=1000,
 ):
-    """Calculate the value of startup for multiple people
-
-    Args:
-        startup_valuation (int): value of startup
-        percent_owned (float): percent of company owned
-        simulations (int): number of startups worked for in a row
-        probability (float): probability of startup success
-        people (int): number of people to simulate
-
-    Returns:
-        int: total value of startup for all people
-    """
+    """Calculate the value of startup for multiple people."""
     total = 0
     count_people_making_money = 0
     for person in range(1, people + 1):
-        # calculate value of startup for each person
-        if (
-            calculate_value(startup_valuation, percent_owned, simulations, probability)
-            > 0
-        ):
-            count_people_making_money += 1
-        total += calculate_value(
+        # Single call per person: count and total must use the SAME draw.
+        value = calculate_value(
             startup_valuation=startup_valuation,
             percent_owned=percent_owned,
             simulations=simulations,
             probability=probability,
         )
+        if value > 0:
+            count_people_making_money += 1
+        total += value
         print(f"Total value of startup for all people: {total} Person #{person}")
-    # print average value of startup for all people
     print(f"Average value of startup for all people: {total/people}")
-    # print how many people earned money from startup
     print(f"Number of people making money from startup: {count_people_making_money}")
-    # print how many people making no money from startup
     print(
         f"Number of people making no money from startup: {people - count_people_making_money}"
     )
-    # print percentage of people making money from startup
     print(
         f"Percentage of people making money from startup: {count_people_making_money/people*100:.2f}%"
     )
-
     return total
 
 
 def simulate_investor(
     startup_valuation=None, investments=None, simulations=100, probability=0.023
 ):
-    """Simulate a venture capitalist investing in a porfolio of companies"""
+    """Simulate a venture capitalist investing in a portfolio of companies."""
     total = 0
     low_range, high_range = startup_valuation
     low_range_investments, high_range_investments = investments
@@ -117,26 +99,27 @@ def simulate_investor(
         f"low range investments: {low_range_investments} high range investments: {high_range_investments}"
     )
     for simulation in range(1, simulations + 1):
-        # generate scenarios with probability 0.5
         scenarios = generate_true_false(probability, simulations)
-        # if True, add value of startup to total
         percentage_owned = random.uniform(0.25, 0.50)
         startup_valuation = random.randint(low_range, high_range)
         amount_invested = random.randint(low_range_investments, high_range_investments)
         accumulated_investments += amount_invested
-        # print accumulated_investment in millions
-        print(f"Cumulative INVESTMENT: {accumulated_investments/1000000:.2f} million")   
+        print(
+            f"Cumulative INVESTMENT: {accumulated_investments/1000000:.2f} million"
+        )
         print(f"Cumulative PAYOUT: {total/1000000:.2f} million")
         print(f"Percentage owned: {percentage_owned}")
         if scenarios[0]:
             total += startup_valuation * percentage_owned
-        # if False skip
         else:
             continue
     return_on_investment = total - accumulated_investments
-    try:
-        percentage_return_on_investment = return_on_investment / total * 100
-    except ZeroDivisionError:
+    # ROI must be relative to what was invested, not to the payout.
+    if accumulated_investments > 0:
+        percentage_return_on_investment = (
+            return_on_investment / accumulated_investments * 100
+        )
+    else:
         percentage_return_on_investment = 0
     payoff_dictionary = {
         "percentage_return_on_investment": percentage_return_on_investment,
@@ -148,11 +131,8 @@ def simulate_investor(
 
 
 def sanity_test(num):
-    """Show the ratio of True/False is close to the probability via law or large numbers"""
-
-    # generate 10 scenarios with probability 0.5
-    generate_true_false([0.5, 0.5], num)
-    # generate 10 scenarios with probability 0.023 (1 in 43 startups succeed)
+    """Show the ratio of True/False is close to the probability via LLN."""
+    generate_true_false(0.5, num)
     generate_true_false([0.023, 0.977], num)
 
 
@@ -161,7 +141,6 @@ def cli():
     """Startup Game Simulator"""
 
 
-# add a command to the cli
 @cli.command("sanity")
 @click.option("--num", default=100, help="Number of scenarios to generate")
 def sanity(num):
@@ -170,13 +149,14 @@ def sanity(num):
     Example:
         python startup_game.py sanity --num 10
     """
-
     sanity_test(num=num)
 
 
 @cli.command("vcportfolio")
 @click.option(
-    "--startup_valuation", default="10000000, 10000000000", help="Value of startup range"
+    "--startup_valuation",
+    default="10000000, 10000000000",
+    help="Value of startup range",
 )
 @click.option(
     "--simulations", default=100, help="Number of startups worked for in a row"
@@ -186,10 +166,11 @@ def sanity(num):
     "--investments", default="10000, 10000000", help="Amount invested range"
 )
 def vcportfolio(startup_valuation, simulations, probability, investments):
-    """Simulate a venture capitalist investing in a porfolio of companies
+    """Simulate a venture capitalist investing in a portfolio of companies
 
     Example:
-        python startup_game.py vcportfolio --startup_valuation (1000000, 100000000) --simulations 100 --probability 0.23
+        python startup_game.py vcportfolio --startup_valuation 1000000,100000000 \\
+            --simulations 100 --probability 0.023
     """
     startup_valuation = tuple(map(int, startup_valuation.split(",")))
     investment_range = tuple(map(int, investments.split(",")))
@@ -200,46 +181,62 @@ def vcportfolio(startup_valuation, simulations, probability, investments):
         click.style(f"Simulations (Companies in Portfolio): {simulations}", fg="green")
     )
     click.echo(click.style(f"Probability of success: {probability}", fg="green"))
-    # show return on investment for venture capitalist
     roi = simulate_investor(
         startup_valuation=startup_valuation,
         investments=investment_range,
         simulations=simulations,
         probability=probability,
     )
-    try:
-        click.echo(click.style(f"Amount Invested: ${roi['amount_invested']/1000000:.2f}M", fg="green"))
-        click.echo(click.style(f"Amount Returned: ${roi['amount_returned']/1000000:.2f}M", fg="green"))
-        click.echo(click.style(f"Return on Investment: ${roi['return_on_investment']/1000000:.2f}M", fg="green"))
-        click.echo(click.style(f"Percentage Return on Investment: {roi['percentage_return_on_investment']:.2f}%", fg="green"))
-    except TypeError:
-        click.echo(click.style(f"Amount Invested: ${roi/1000000:.2f}M", fg="green"))
-        click.echo(click.style(f"Amount Returned: ${roi/1000000:.2f}M", fg="green"))
-        click.echo(click.style(f"Return on Investment: ${roi/1000000:.2f}M", fg="green"))
-        click.echo(click.style(f"Percentage Return on Investment: 0%", fg="green"))
+    click.echo(
+        click.style(
+            f"Amount Invested: ${roi['amount_invested']/1000000:.2f}M", fg="green"
+        )
+    )
+    click.echo(
+        click.style(
+            f"Amount Returned: ${roi['amount_returned']/1000000:.2f}M", fg="green"
+        )
+    )
+    click.echo(
+        click.style(
+            f"Return on Investment: ${roi['return_on_investment']/1000000:.2f}M",
+            fg="green",
+        )
+    )
+    click.echo(
+        click.style(
+            f"Percentage Return on Investment: {roi['percentage_return_on_investment']:.2f}%",
+            fg="green",
+        )
+    )
+
 
 @cli.command("simulate")
 @click.option("--startup_valuation", default=100000000, help="Value of startup")
 @click.option("--percent_owned", default=0.01, help="Percent of company owned")
-@click.option("--simulations", default=4, help="Number of startups worked for in a row")
+@click.option(
+    "--simulations", default=4, help="Number of startups worked for in a row"
+)
 @click.option("--probability", default=0.023, help="Probability of success")
 def simulate(startup_valuation, percent_owned, simulations, probability):
     """Simulate a startup career
 
     Example:
-        python startup_game.py simulate --startup_valuation 100000000 --percent_owned 0.01 --simulations 4 --probability 0.023
+        python startup_game.py simulate --startup_valuation 100000000 \\
+            --percent_owned 0.01 --simulations 4 --probability 0.023
     """
-
-    total = calculate_value(startup_valuation, percent_owned, simulations, probability)
-    # use click colors to print total
+    total = calculate_value(
+        startup_valuation, percent_owned, simulations, probability
+    )
     click.secho("Total: {}".format(total), fg="green")
 
 
-# add a command to the cli
 @cli.command("simulate_multiple")
 @click.option("--startup_valuation", default=100000000, help="Value of startup")
 @click.option("--percent_owned", default=0.01, help="Percent of company owned")
-@click.option("--simulations", default=4, help="Number of startups worked for in a row")
+@click.option(
+    "--simulations", default=4, help="Number of startups worked for in a row"
+)
 @click.option("--probability", default=0.023, help="Probability of success")
 @click.option("--people", default=1000, help="Number of people to simulate")
 def simulate_multiple(
@@ -248,17 +245,14 @@ def simulate_multiple(
     """Simulate a startup career for multiple people
 
     Example:
-        python startup_game.py simulate_multiple --startup_valuation 100000000\
+        python startup_game.py simulate_multiple --startup_valuation 100000000 \\
             --percent_owned 0.01 --simulations 4 --probability 0.023 --people 1000
     """
-
     total = calculate_value_multiple(
         startup_valuation, percent_owned, simulations, probability, people
     )
-    # use click colors to print total
     click.secho("Total Earned: {}".format(total), fg="green")
 
 
-# run the code
 if __name__ == "__main__":
     cli()

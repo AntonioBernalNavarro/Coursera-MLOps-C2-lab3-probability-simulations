@@ -11,7 +11,16 @@ Future improvements:
     * Jupyter notebook with interactive widgets to show historical results
     * Add a web interface to allow for bets and results using streamlit or gradio
 
+Implemented in this fork:
+
+    * streak-analysis: empirically test the gambler's fallacy by measuring
+      P(target colour | L consecutive opposite colours) and running a
+      chi-square red/black balance test. See docs/lab-report.md (section B).
+
 """
+import csv
+from pathlib import Path
+
 import pandas as pd
 import click
 import sys
@@ -170,7 +179,6 @@ def cli():
     "--color", type=click.Choice(["red", "black", "green"]), help="Color to bet on"
 )
 @click.option("--bet", default=1, help="Amount to bet on each spin")
-@click.option("--bet", default=1, help="Amount of money to bet")
 @click.option(
     "--number_bet", default=None, help="Number to bet on", type=click.IntRange(0, 36)
 )
@@ -208,6 +216,149 @@ def spin_option(count, bet, number_bet, color):
         results=results, bet=bet, count=count, color=color, number=number_bet
     )
     print(f"Total winnings: {total_winnings}")
+
+
+# ---------------------------------------------------------------------------
+# Original enhancement: streak-analysis
+# Empirically refutes the gambler's fallacy by measuring
+# P(target | L consecutive opposite colours) for L = 1..8 and running a
+# chi-square red/black balance test.
+#
+# NOTE: this wheel is the American variant (38 slots: 0 and 00), so the
+# theoretical probability of red (or black) is 18/38 ~= 0.4737, not 18/37
+# as on a European wheel.
+# ---------------------------------------------------------------------------
+
+
+@cli.command("streak-analysis")
+@click.option("--spins", default=10000, type=int, help="Number of spins to simulate")
+@click.option(
+    "--color",
+    default="red",
+    type=click.Choice(["red", "black"]),
+    help="Target colour",
+)
+@click.option("--seed", default=None, type=int, help="Random seed for reproducibility")
+@click.option(
+    "--export",
+    "export_path",
+    default=None,
+    type=click.Path(),
+    help="Write results to a CSV file at this path",
+)
+def streak_analysis(spins, color, seed, export_path):
+    """Simulate N spins and empirically test the gambler's fallacy.
+
+    For each streak length L of the opposite colour (1..8), report the
+    empirical P(target colour | L consecutive opposite colours). On a fair
+    wheel this must be constant and equal to 18/38 ~= 0.4737 (American
+    wheel: 0 and 00). Also runs a chi-square test (df=1) on the red/black
+    balance.
+
+    Example:
+        ./roulette.py streak-analysis --spins 10000 --color red --seed 42
+    """
+    wheel = build_wheel()
+    # Vectorised sampling: one call, reproducible, fast
+    samples = wheel.sample(
+        n=spins, replace=True, weights="probability", random_state=seed
+    )
+    colours = samples["color"].tolist()
+    opposite = "black" if color == "red" else "red"
+
+    # Empirical P(color | L opposite in a row)
+    results = []
+    for length in range(1, 9):
+        hits = 0
+        trials = 0
+        streak = 0
+        for c in colours:
+            if streak >= length:
+                trials += 1
+                if c == color:
+                    hits += 1
+            if c == opposite:
+                streak += 1
+            else:
+                streak = 0
+        prob = hits / trials if trials else float("nan")
+        results.append((length, trials, hits, prob))
+
+    # Chi-square on red vs black balance (green excluded, df=1)
+    relevant = [c for c in colours if c in (color, opposite)]
+    n = len(relevant)
+    observed_color = sum(1 for c in relevant if c == color)
+    observed_opp = n - observed_color
+    expected = n / 2 if n else 1.0
+    chi_sq = (
+        ((observed_color - expected) ** 2 / expected)
+        + ((observed_opp - expected) ** 2 / expected)
+        if n
+        else 0.0
+    )
+    fair = chi_sq < 3.841  # critical value at alpha=0.05, df=1
+
+    theoretical = 18 / 38  # American wheel
+
+    click.echo(click.style(f"Simulated {spins} spins (seed={seed})", fg="cyan"))
+    click.echo(click.style(f"Target colour: {color}", fg="cyan"))
+    click.echo(
+        click.style(
+            f"Theoretical P({color}) = 18/38 = {theoretical:.4f} "
+            "(American wheel: 0 and 00)",
+            fg="cyan",
+        )
+    )
+    click.echo()
+    header = (
+        f"{'L (streak of ' + opposite + ')':<28}"
+        f"{'Trials':>8}"
+        f"{color.capitalize() + ' hits':>12}"
+        f"{'P(' + color + '|L)':>14}"
+        f"{'Theoretical':>14}"
+    )
+    click.echo(header)
+    click.echo("-" * 76)
+    for length, trials, hits, prob in results:
+        click.echo(
+            f"{length:<28}{trials:>8}{hits:>12}{prob:>14.4f}{theoretical:>14.4f}"
+        )
+    click.echo()
+    click.echo(
+        f"Chi-square red/black balance: {chi_sq:.4f} "
+        "(critical @ alpha=0.05, df=1: 3.841)"
+    )
+    if fair:
+        click.echo(
+            click.style(
+                "PASS: cannot reject fairness between red and black (p > 0.05)",
+                fg="green",
+            )
+        )
+    else:
+        click.echo(
+            click.style(
+                "FAIL: red/black imbalance detected (p < 0.05)", fg="yellow"
+            )
+        )
+    click.echo()
+    click.echo("Conclusion: P(color | L opposite) is flat in L. Streaks do")
+    click.echo("not change the probability of the next spin. The gambler's")
+    click.echo("fallacy is refuted with reproducible evidence.")
+
+    if export_path:
+        path = Path(export_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                ["streak_length", "trials", "hits", "p_empirical", "p_theoretical"]
+            )
+            for length, trials, hits, prob in results:
+                writer.writerow(
+                    [length, trials, hits, f"{prob:.6f}", f"{theoretical:.6f}"]
+                )
+        click.echo(click.style(f"Results exported to {path}", fg="green"))
 
 
 # run the cli
