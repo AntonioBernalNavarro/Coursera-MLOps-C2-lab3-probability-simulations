@@ -1,7 +1,7 @@
 # Probability Simulations Lab — Startup Careers & Roulette
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
-[![Tests](https://img.shields.io/badge/tests-pytest-green.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-9%20passed-green.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A fork of [`nogibjj/Coursera-MLOps-C2-lab3-probability-simulations`](https://github.com/nogibjj/Coursera-MLOps-C2-lab3-probability-simulations),
@@ -11,7 +11,7 @@ roulette simulator that empirically demonstrates the gambler's fallacy.
 The purpose of this laboratory is to employ Monte Carlo simulations in order
 to model two real‑world scenarios: the **professional career within startups**
 as contrasted with the **portfolio of a venture‑capital investor**, and the
-behaviour of a **European roulette wheel**.
+behaviour of a **roulette wheel**.
 
 ---
 
@@ -34,6 +34,7 @@ behaviour of a **European roulette wheel**.
 - [Repository structure (schema)](#repository-structure-schema)
 - [Tests](#tests)
 - [Work history](#work-history)
+- [Known gaps and next steps](#known-gaps-and-next-steps)
 - [References](#references)
 - [Author](#author)
 
@@ -47,7 +48,7 @@ behaviour of a **European roulette wheel**.
 | Fork | [`AntonioBernalNavarro/Coursera-MLOps-C2-lab3-probability-simulations`](https://github.com/AntonioBernalNavarro/Coursera-MLOps-C2-lab3-probability-simulations) |
 | Working branch | `feature/lab3-portfolio` |
 | Runtime | Python 3.12 (devcontainer + Codespaces) |
-| Status | Section A complete; Section B in progress |
+| Status | Sections A and B complete; 9/9 tests passing |
 
 ---
 
@@ -265,44 +266,81 @@ laboratory.
 ./roulette.py spin --count 10 --color red --bet 1
 ```
 
-The execution and its balance are recorded in `docs/lab-report.md`.
+Observed outcome: `30 10 31 13 30 4 4 9 0 29` → 6 black, 3 red, 1 green,
+total winnings **−4** (three red wins × $2 payout − $10 staked). The execution
+and its balance are recorded in `docs/lab-report.md`.
 
 ### Reflection B1 — the gambler's fallacy
 
-It is not prudent. On a fair European roulette wheel, `P(red) = 18/37 ≈ 48.65%`
-on **each** spin, independently of all previous outcomes. Ten consecutive
-black numbers carry a probability of `(19/37)^10 ≈ 0.16%` — a rare but
-possible event whose occurrence **does not increase** the future probability
-of red. This is the **gambler's fallacy**: conflating the *a priori*
-probability of a streak with the *conditional* probability of the next spin.
-Increasing the stake in expectation of "compensation" constitutes a martingale
-strategy that amplifies variance and may exhaust the bankroll before recovery.
+It is not prudent. The wheel implemented in this repository is the **American**
+variant (38 slots: 0 and 00 are green, 18 red, 18 black), so
+`P(red) = P(black) = 18/38 ≈ 47.37%` and `P(green) = 2/38 ≈ 5.26%` on
+**each** spin, independently of all previous outcomes. Ten consecutive black
+numbers carry a probability of `(18/38)^10 ≈ 0.062%` — a rare but possible
+event whose occurrence **does not increase** the future probability of red.
+This is the **gambler's fallacy**: conflating the *a priori* probability of a
+streak with the *conditional* probability of the next spin. Increasing the
+stake in expectation of "compensation" constitutes a martingale strategy that
+amplifies variance and may exhaust the bankroll before recovery.
+
+> Note: on a European wheel (37 slots) the probability would be 18/37 ≈ 48.65%
+> and (18/37)^10 ≈ 0.16%. The qualitative conclusion is identical; only the
+> constant changes because this repository's wheel is American.
 
 ### Original enhancement: `streak-analysis`
 
-**Status:** in progress on the `feature/lab3-portfolio` branch.
+**Status:** implemented and tested (8 tests in `tests/test_roulette.py`).
 
 The original simulator merely *generates* spins; it does not *explain* the
 pattern that the user believes to perceive. The enhancement introduces a
-command that simulates N spins, detects streaks of the opposite colour, and
-empirically tests the gambler's fallacy:
+command that reuses `build_wheel()` (no duplicate model) and empirically tests
+the gambler's fallacy:
 
-- `P(colour | streak of opposite colour of length L)` for `L = 1..8` → expected
-  to be **flat** and equal to `18/37`.
-- χ² test of uniformity over the complete sequence.
-- Export of a CSV file and a plot to `docs/img/` for integration into
-  notebooks.
-- Pure function `spin_once(rng)` extracted so that it can be unit‑tested.
+```bash
+./roulette.py streak-analysis --spins 10000 --color red --seed 42
+```
+
+Observed result at 10,000 spins, seed 42:
+
+```
+L (streak of black)   Trials   Red hits   P(red|L)   Theoretical
+1                      4758       2225      0.4676       0.4737
+2                      2289       1056      0.4613       0.4737
+3                      1114        543      0.4874       0.4737
+4                       516        247      0.4787       0.4737
+5                       238        129      0.5420       0.4737
+6                        96         57      0.5938       0.4737
+7                        33         24      0.7273       0.4737
+8                         9          6      0.6667       0.4737
+
+Chi-square red/black balance: 0.0341  (critical @ alpha=0.05, df=1: 3.841)
+PASS: cannot reject fairness between red and black (p > 0.05)
+```
+
+The higher L rows show larger sampling noise because `Trials` drops
+exponentially (4758 at L=1, 9 at L=8); no L value survives a Bonferroni
+correction for 8 simultaneous hypotheses (α = 0.05/8 = 0.00625). The data are
+compatible with a fair wheel. Full table, standard-error analysis and
+interpretation are in [`docs/lab-report.md`](docs/lab-report.md) (section B.3).
+
+Features:
+
+- `P(colour | streak of opposite colour of length L)` for `L = 1..8` → flat at
+  `18/38` (theoretical value for the American wheel).
+- χ² test (df=1) on the red/black balance (green excluded).
+- `--seed` for reproducibility (pandas `random_state`), `--export` for CSV.
+- Reuses the existing `build_wheel()`, so the sampling model is unchanged.
 
 ### Reflection B2 — contribution of the enhancement
 
 The enhancement converts an erroneous intuition into a **falsifiable
 hypothesis** and refutes it with reproducible evidence. From an engineering
-perspective, it separates the sampling logic (`spin_once`) so that it can be
-tested, adds `--seed` for reproducibility, and provides `--export` for
-integration with the analysis. From a pedagogical perspective, it demonstrates
-that observed streaks follow the expected geometric distribution and that the
-future probability does not depend on the history.
+perspective, it reuses `build_wheel()` (no duplicated probability model),
+adds `--seed` for reproducibility via pandas' `random_state`, and provides
+`--export` for integration with notebooks. From a pedagogical perspective, it
+demonstrates that observed streaks follow the expected geometric distribution,
+that the future probability does not depend on the history, and that
+statistical noise in short streaks must not be confused with bias.
 
 ---
 
@@ -316,22 +354,24 @@ future probability does not depend on the history.
 ├── .vscode/
 │   └── settings.json                 # Interpreter, linting
 ├── docs/
-│   ├── img/                          # Generated plots
+│   ├── img/
+│   │   └── streak_red_seed42.csv     # streak-analysis export (seed=42)
 │   └── lab-report.md                 # Report with results and reflections
 ├── mylib/                            # Auxiliary library from the original repository
 ├── notebooks/
 │   └── exploration.ipynb             # Analysis with pandas/matplotlib
 ├── tests/
-│   ├── test_main.py                  # Original tests
-│   └── test_roulette.py              # Enhancement tests (pending)
+│   └── test_roulette.py              # 8 tests for streak-analysis
 ├── .gitignore
 ├── LICENSE
 ├── Makefile                          # Targets: install, test, lint
 ├── README.md                         # This file
 ├── main.py
+├── pytest.ini                        # Adds repo root to pythonpath
 ├── requirements.txt                  # Updated for Python 3.12
 ├── roulette.py                       # Roulette simulator (with enhancement)
-└── startup_game.py                   # Startup and VC portfolio simulator
+├── startup_game.py                   # Startup and VC portfolio simulator
+└── test_main.py                      # Original tests (root-level)
 ```
 
 **Git workflow:**
@@ -339,7 +379,8 @@ future probability does not depend on the history.
 ```text
 main ──●──●──●──●  (fork history)
         │
-        └──●──●──●  feature/lab3-portfolio  (modernisation + fixes + report + enhancement)
+        └──●──●──●──●──●  feature/lab3-portfolio
+                           (modernisation + fixes + report + enhancement)
 ```
 
 ---
@@ -348,9 +389,24 @@ main ──●──●──●──●  (fork history)
 
 ```bash
 make test
-# or directly
-pytest tests/ -v
 ```
+
+The `Makefile` target runs the full test discovery (recursive) with coverage on
+`mylib` and `roulette`:
+
+```makefile
+test:
+	python -m pytest -vv --cov=mylib --cov=roulette --cov-report=term-missing
+```
+
+Result at the time of writing: **9 passed** (`test_main.py::test_add` plus 8
+tests in `tests/test_roulette.py`: wheel shape, wheel colour counts 18/18/2,
+`spin_wheel` contract, `simulate_spins` count, CLI smoke test, seed
+reproducibility, CSV export, and a flatness check on `P(red|L)` at 50k
+spins). Coverage: 65% overall on the covered modules.
+
+`pytest.ini` adds the repository root to `pythonpath` so that `from roulette
+import cli` works when tests run from `tests/`.
 
 ---
 
@@ -362,7 +418,26 @@ pytest tests/ -v
 | `docs(lab3): document sanity...` | `docs` | Documented the `TypeError` incident and its fix |
 | `fix(startup_game): root-cause...` | `fix` | Three root‑cause bugs corrected (sanity, double sampling, ROI) |
 | `docs(lab3): add startup/VC...` | `docs` | Report with results and reflections A1/A2 |
+| `feat(roulette): add streak-analysis...` | `feat` | New `streak-analysis` command; 8 tests; `pytest.ini`; Makefile coverage |
+| `chore(make): drop --cov=main` | `chore` | `main.py` never imported; removed from coverage target |
+| `docs(lab3): complete section B.3...` | `docs` | Real `streak-analysis` output, standard-error analysis, CSV |
 | `docs: rewrite README...` | `docs` | README rewritten as a portfolio entry point |
+
+---
+
+## Known gaps and next steps
+
+- **`startup_game.py` has no unit tests.** Its three bug fixes are documented
+  in `docs/lab-report.md` (section A.4) but not regression‑tested. Adding
+  `tests/test_startup_game.py` (sanity, `generate_true_false` with scalar and
+  list, `calculate_value_multiple` single‑draw, ROI denominator) is the
+  natural next step.
+- **`pytest` is pinned at 7.1.3** by the original `requirements.txt`. Upgrading
+  to `pytest>=8` removes the `ast.Str` deprecation warnings observed during
+  the test run.
+- **`--cov=main` was removed** from the coverage target because `main.py` is
+  never imported. `startup_game.py` is likewise not in the coverage target
+  until it has tests.
 
 ---
 
